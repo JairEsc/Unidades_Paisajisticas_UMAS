@@ -11,12 +11,17 @@ Se utiliza la librería mclust para clustering/clasificación a partir de modelo
 
 ## Criterio de Información Bayesiana
 
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+---
 
 ```{r}
-datos = read.csv("")
-datos_prueba = datos[,- 1]
-BIC2 <- mclustBIC(datos_prueba,G = 6:15,modelNames = c("EEI","EEV","EEE"))
+datos = read.csv("../outputs/rasters_as_matrix.csv")
+datos[is.na(datos)]=0
+datos_prueba = datos
+BIC2 <- mclustBIC(datos_prueba,G = 6:15,modelNames = c("EEI","EEV","EEE"))##Tarda
+
+```
+
+```{r}
 mod1_2 <- Mclust(datos, x = BIC2)
 s = summary(mod1, parameters = TRUE)
 # 998 renglones y 978 columnas rellenar por renglones
@@ -27,17 +32,8 @@ matriz_clasificacion = matrix(as.array(clasificacion), nrow = 998, ncol = 978, b
 library(raster)
 raster_data <- raster(matriz_clasificacion)
 raster_extent <- extent(raster_data)
-color_palette <- terrain.colors(100) # Puedes ajustar el n´umero de colores seg´un tu preferencia
+color_palette <- terrain.colors(100) 
 plot(raster_data, col=rainbow(15), main="Raster pv_refri1.tif")
 plot(shapefile, add=TRUE, col="white", border="red")
-writeRaster(raster_data, "C:\\Users\\Usuario\\Desktop\\Eduardo Alanis(Servicio)\\Cosas Realizadas\\
+writeRaster(raster_data, "")
 ```
-
-You can add options to executable code like this
-
-```{r}
-#| echo: false
-2 * 2
-```
-
-The `echo: false` option disables the printing of code (only output is displayed).

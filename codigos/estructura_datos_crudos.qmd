@@ -40,7 +40,7 @@ list.files("../inputs/rasters/",pattern = ".tif$",full.names = T) |>
   lapply(raster)->lista_rasters
 ```
 
-Utilizamos los raster como una matriz de dimensiones $(998*978)*(5)$ o bien un tensor de \$\$(998) \\cdot (978) \\cdot (5)\$\$.
+Utilizamos los raster como una matriz de dimensiones $(998\cdot978)\cdot(5)$ o bien un tensor de $(998) \cdot (978) \cdot (5)$.
 
 ```{r}
 rasters_as_matrix=matrix(data = (lista_rasters |>  lapply((getValues))) |> unlist(),

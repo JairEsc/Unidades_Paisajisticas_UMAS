@@ -7,33 +7,100 @@ editor: visual
 
 ## Mclust
 
-Se utiliza la librería mclust para clustering/clasificación a partir de modelos de mezcla Gaussiana.
+Se utiliza la librería **mclust** para agrupamiento (clustering), clasificación y estimación de densidades basado en modelos de mezcla finita de distribuciones normales. Proporciona funciones para la estimación de parámetros mediante el algoritmo EM para modelos de mezcla normales con una variedad de estructuras de covarianza, así como funciones para simular a partir de estos modelos. También se incluyen funciones que combinan el agrupamiento jerárquico basado en modelos, EM para la estimación de mezclas y el Criterio de Información Bayesiano (BIC) en estrategias completas para el clustering, la estimación de densidad y el análisis discriminante.
 
 ## Criterio de Información Bayesiana
 
----
+------------------------------------------------------------------------
+
+El **criterio de información bayesiano (BIC)** es una prueba empleada para evaluar el ajuste de un modelo. Sirve para comparar varios modelos y elegir el mejor: **el modelo con el BIC más bajo es el preferido**. Fue creado por Gideon E. Schwarz y presentado en un artículo de 1978, donde explicó su fundamento basado en ideas bayesianas..
+
+Primero cargamos los datos obtenidos en el archivo **QMD** anterior. En estos datos, la **columna 5** corresponde al **raster usv_mbien**. Los valores iguales a **0** indican que el punto está fuera del estado de Hidalgo, por lo que reemplazaremos esos ceros por **NA**.
+
+Por otro lado, la **columna 3** corresponde al **raster de pendiente**. Para esta variable, trataremos los valores **mayores a 90** grados sustituyéndolos por el **promedio de las pendientes que sí son menores a 90 grados**.
 
 ```{r}
 datos = read.csv("../outputs/rasters_as_matrix.csv")
-datos[is.na(datos)]=0
-datos_prueba = datos
-BIC2 <- mclustBIC(datos_prueba,G = 6:15,modelNames = c("EEI","EEV","EEE"))##Tarda
+datos = datos |> 
+  dplyr::mutate(
+    V5 = dplyr::if_else(condition = V5 == 0, true = NA, false = V5),
+    V3 = dplyr::if_else(condition = V3 > 90, true = mean(V3[V3 < 90], na.rm = TRUE), false = V3)
+    )
 
 ```
 
+Después, vamos a **escalar los valores de los raster usando la función `scale()`**. Una vez escalados, tomaremos el **valor mínimo de cada raster en valor absoluto** y se lo sumaremos a todos los valores, de modo que los raster queden con valores **a partir de 0**.
+
+Finalmente, los valores que estaban fuera del estado de Hidalgo y que eran representados con **NA**, ahora los reemplazaremos por **–1**.
+
 ```{r}
-mod1_2 <- Mclust(datos, x = BIC2)
-s = summary(mod1, parameters = TRUE)
-# 998 renglones y 978 columnas rellenar por renglones
-clasificacion = s$classification
-clasificacion = clasificacion[-((length(clasificacion) - 35): length(clasificacion))]
-clasificacion = as.numeric(clasificacion)
-matriz_clasificacion = matrix(as.array(clasificacion), nrow = 998, ncol = 978, byrow = TRUE)
-library(raster)
-raster_data <- raster(matriz_clasificacion)
-raster_extent <- extent(raster_data)
-color_palette <- terrain.colors(100) 
-plot(raster_data, col=rainbow(15), main="Raster pv_refri1.tif")
-plot(shapefile, add=TRUE, col="white", border="red")
-writeRaster(raster_data, "")
+# Escalar los raster
+datos = scale(datos) |>  as.data.frame()
+
+# Sumar el minimo en valor obsoluto a cada raster
+datos = datos |> 
+  dplyr::mutate(
+    V1 = V1 + V1 |>  min(na.rm = T) |>  abs(),
+    V2 = V2 + V2 |>  min(na.rm = T) |>  abs(),
+    V3 = V3 + V3 |>  min(na.rm = T) |>  abs(),
+    V4 = V4 + V4 |>  min(na.rm = T) |>  abs(),
+    V5 = V5 + V5 |>  min(na.rm = T) |>  abs()
+    )
+
+# A los Na los remplazaremos como -1
+datos = datos |> 
+  dplyr::mutate(
+    dplyr::across(
+      .cols = V1:V5,
+      .fns = ~ dplyr::if_else(is.na(.x), true = -1, false = .x)
+      )
+    )
+
+```
+
+Usando **mclustBIC** calculamos los **Criterios de Información Bayesianos (BIC)** para distintos modelos de mezcla gaussiana y diferentes números de componentes (clusters). Los parámetros principales son:
+
+-   **G**: Indica cuántos clusters se van a evaluar. En este caso, se prueban entre **6 y 15 clusters**.
+
+-   **modelNames**: Especifica los modelos que se quieren comparar. Cada modelo representa una forma distinta de definir la **matriz de covarianza** en las mezclas gaussianas. Por ejemplo:
+
+    -   **EEI**: Elipsoides con **volumen y forma iguales**, pero **orientación fija**.
+
+    -   **EEV**: Elipsoides con **volumen y forma iguales**, pero **orientación variable**.
+
+    -   **EEE**: Elipsoides con **volumen, forma y orientación iguales** en todos los clusters.
+
+De esta manera **BIC2** almacena los valores de **BIC** calculados para cada combinación de número de **clústeres (de 6 a15**) y cada **modelo especificado** (EEI, EEV, EEE).
+
+```{r}
+BIC2 = mclust::mclustBIC(data = datos, G = 6:15, modelNames = c("EEI","EEV","EEE"))
+plot(BIC2)
+
+```
+
+Toda dar una descripcion del grafico.
+
+Ahora seleccionaremos el **mejor modelo** usando el **criterio BIC**. Luego, con ese modelo y el número óptimo de clústeres, ajustaremos una mezcla gaussiana a los datos utilizando la función **Mclust**. Esta función solo necesita dos parámetros:
+
+-   **data**: el conjunto de datos al que se le va a ajustar el modelo de mezcla gaussiana.
+
+-   **x**: el resultado generado previamente por la función **mclustBIC**, que contiene la información necesaria para elegir el mejor modelo.
+
+```{r}
+modelo = mclust::Mclust(data = datos, x = BIC2)
+```
+
+Finalmente, obtenemos el resumen del modelo usando summary. Luego tomamos la clasificación generada por el modelo, la colocamos en una matriz con el mismo tamaño que los rásteres originales y, por último, convertimos esa matriz en un nuevo ráster.
+
+```{r}
+resumen = summary(object = modelo, parameters = T)
+clasificacion = resumen$classification |>  as.numeric()
+clasificacion_matriz = matrix(data = clasificacion, nrow = 998, ncol = 978, byrow = T)
+raster_matriz = raster::raster(clasificacion_matriz)
+```
+
+Grafica del raster
+
+```{r}
+raster::plot(clasificacion_raster_data, col=rainbow(15))
 ```
